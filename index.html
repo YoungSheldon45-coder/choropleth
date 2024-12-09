@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choropleth Map</title>
+
+  <!-- D3.js Library -->
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <script src="https://d3js.org/topojson.v3.min.js"></script>
+
+  <!-- freeCodeCamp Test Script -->
+  <script src="https://cdn.freecodecamp.org/testable-projects-fcc/v1/bundle.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    .county {
+      stroke: #fff;
+    }
+    .county:hover {
+      stroke: black;
+      stroke-width: 1.5px;
+    }
+    #tooltip {
+      position: absolute;
+      background-color: lightgray;
+      border: 1px solid black;
+      padding: 5px;
+      opacity: 0;
+      pointer-events: none;
+      font-size: 14px;
+    }
+    #legend rect {
+      stroke: #000;
+    }
+  </style>
+</head>
+<body>
+  <!-- Title -->
+  <h1 id="title">United States Educational Attainment</h1>
+  <p id="description">Percentage of adults age 25 and older with a bachelor's degree or higher (2010-2014)</p>
+
+  <!-- Chart Container -->
+  <div id="chart"></div>
+
+  <!-- Tooltip -->
+  <div id="tooltip" data-education=""></div>
+
+  <script>
+    const educationUrl = "https://cdn.freecodecamp.org/testable-projects-fcc/data/choropleth_map/for_user_education.json";
+    const countiesUrl = "https://cdn.freecodecamp.org/testable-projects-fcc/data/choropleth_map/counties.json";
+
+    const width = 1000;
+    const height = 600;
+    const padding = 60;
+
+    // Fetch data
+    Promise.all([
+      d3.json(countiesUrl),
+      d3.json(educationUrl)
+    ]).then(([countyData, educationData]) => {
+      createChoropleth(countyData, educationData);
+    });
+
+    function createChoropleth(countyData, educationData) {
+      // Define a color scale
+      const colorScale = d3.scaleThreshold()
+        .domain([10, 20, 30, 40, 50])
+        .range(["#f7fbff", "#deebf7", "#9ecae1", "#4292c6", "#08519c"]);
+
+      // Tooltip
+      const tooltip = d3.select("body")
+        .append("div")
+        .attr("id", "tooltip")
+        .style("opacity", 0);
+
+      // Create an SVG container
+      const svg = d3.select("#chart")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+      // Convert TopoJSON to GeoJSON
+      const counties = topojson.feature(countyData, countyData.objects.counties).features;
+
+      // Match education data to counties
+      const educationMap = new Map(educationData.map(d => [d.fips, d]));
+
+      // Draw counties
+      svg.selectAll(".county")
+        .data(counties)
+        .enter()
+        .append("path")
+        .attr("class", "county")
+        .attr("data-fips", d => d.id)
+        .attr("data-education", d => educationMap.get(d.id)?.bachelorsOrHigher || 0)
+        .attr("fill", d => {
+          const education = educationMap.get(d.id)?.bachelorsOrHigher || 0;
+          return colorScale(education);
+        })
+        .attr("d", d3.geoPath())
+        .on("mouseover", (event, d) => {
+          const eduData = educationMap.get(d.id);
+          tooltip.style("opacity", 0.9)
+            .attr("data-education", eduData.bachelorsOrHigher)
+            .html(`
+              <strong>County:</strong> ${eduData.area_name}, ${eduData.state}<br>
+              <strong>Education:</strong> ${eduData.bachelorsOrHigher}%
+            `)
+            .style("left", `${event.pageX + 10}px`)
+            .style("top", `${event.pageY - 30}px`);
+        })
+        .on("mouseout", () => {
+          tooltip.style("opacity", 0);
+        });
+
+      // Legend
+      const legendWidth = 300;
+      const legendHeight = 20;
+      const legendColors = colorScale.range();
+      const legendDomain = colorScale.domain();
+
+      const legend = svg.append("g")
+        .attr("id", "legend")
+        .attr("transform", `translate(${width - legendWidth - 20}, ${height - 50})`);
+
+      legend.selectAll("rect")
+        .data(legendColors)
+        .enter()
+        .append("rect")
+        .attr("x", (d, i) => i * (legendWidth / legendColors.length))
+        .attr("y", 0)
+        .attr("width", legendWidth / legendColors.length)
+        .attr("height", legendHeight)
+        .attr("fill", d => d);
+
+      const legendScale = d3.scaleLinear()
+        .domain([legendDomain[0], legendDomain[legendDomain.length - 1]])
+        .range([0, legendWidth]);
+
+      const legendAxis = d3.axisBottom(legendScale)
+        .tickSize(10)
+        .tickValues(legendDomain)
+        .tickFormat(d => d + "%");
+
+      legend.append("g")
+        .attr("transform", `translate(0, ${legendHeight})`)
+        .call(legendAxis);
+    }
+  </script>
+</body>
+</html>
